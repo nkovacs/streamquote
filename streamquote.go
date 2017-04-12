@@ -2,6 +2,7 @@
 package streamquote
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 	"unicode/utf8"
@@ -17,18 +18,43 @@ type Converter interface {
 	Convert(in io.Reader, out io.Writer) (int, error)
 }
 
-const bufSize = 100 * 1024
+const defaultBufSize = 100 * 1024
 
 const lowerhex = "0123456789abcdef"
 
 type converter struct {
-	readBuffer  [bufSize]byte
+	readBuffer  []byte
 	writeBuffer [10]byte
 }
 
+type optionstruct struct {
+	readBufferSize int
+}
+
+type optionfunc func(*optionstruct)
+
+// ReadBufferSize sets the size of the read buffer.
+// The size must be at least utf8.UTFMax.
+func ReadBufferSize(n int) optionfunc {
+	if n < utf8.UTFMax {
+		panic(fmt.Errorf("read buffer size (%v) is smaller than utf8.UTFMax (%v)", n, utf8.UTFMax))
+	}
+	return func(opt *optionstruct) {
+		opt.readBufferSize = n
+	}
+}
+
 // New returns a new Converter.
-func New() Converter {
-	return &converter{}
+func New(options ...optionfunc) Converter {
+	opt := optionstruct{
+		readBufferSize: defaultBufSize,
+	}
+	for _, option := range options {
+		option(&opt)
+	}
+	return &converter{
+		readBuffer: make([]byte, opt.readBufferSize),
+	}
 }
 
 // Convert converts the data in "in", writing it to "out".

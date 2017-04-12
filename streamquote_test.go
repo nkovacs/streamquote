@@ -147,3 +147,45 @@ func BenchmarkStrconvQuoteLarge(b *testing.B) {
 		strconv.Quote(s)
 	}
 }
+
+func BenchmarkConverterLargeBufferTiny(b *testing.B) {
+	converter := New(ReadBufferSize(16))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		// Using ioutil.Discard here may not seem fair,
+		// because strconv.Quote has to allocate the result string,
+		// but the point of this package is that you don't have to
+		// allocate the entire result string, you can stream the result.
+		converter.Convert(generateLargeString(), ioutil.Discard)
+	}
+}
+
+func BenchmarkConverterLargeBufferSmall(b *testing.B) {
+	converter := New(ReadBufferSize(1024))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		// Using ioutil.Discard here may not seem fair,
+		// because strconv.Quote has to allocate the result string,
+		// but the point of this package is that you don't have to
+		// allocate the entire result string, you can stream the result.
+		converter.Convert(generateLargeString(), ioutil.Discard)
+	}
+}
+
+func BenchmarkConverterLargeBufferMedium(b *testing.B) {
+	converter := New(ReadBufferSize(10 * 1024))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		// Using ioutil.Discard here may not seem fair,
+		// because strconv.Quote has to allocate the result string,
+		// but the point of this package is that you don't have to
+		// allocate the entire result string, you can stream the result.
+		converter.Convert(generateLargeString(), ioutil.Discard)
+	}
+}
