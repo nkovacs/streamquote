@@ -1,4 +1,4 @@
-## streamquote
+## streamquote [![Build Status](https://travis-ci.org/nkovacs/streamquote.svg?branch=master)](https://travis-ci.org/nkovacs/streamquote) [![GoDoc](https://godoc.org/github.com/nkovacs/streamquote?status.svg)](https://godoc.org/github.com/nkovacs/streamquote)
 
 This package provides a streaming version of `strconv.Quote`.
 
