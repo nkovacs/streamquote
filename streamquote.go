@@ -17,13 +17,14 @@ type Converter interface {
 	Convert(in io.Reader, out io.Writer) (int, error)
 }
 
-type converter struct {
-	buffer [bufSize]byte
-}
-
 const bufSize = 100 * 1024
 
 const lowerhex = "0123456789abcdef"
+
+type converter struct {
+	readBuffer  [bufSize]byte
+	writeBuffer [10]byte
+}
 
 // New returns a new Converter.
 func New() Converter {
@@ -36,7 +37,7 @@ func New() Converter {
 // It is not safe for concurrent use.
 func (c *converter) Convert(in io.Reader, out io.Writer) (int, error) {
 	var err error
-	bufSize := len(c.buffer)
+	bufSize := len(c.readBuffer)
 	n := 0
 
 	var processed = bufSize
@@ -47,9 +48,9 @@ func (c *converter) Convert(in io.Reader, out io.Writer) (int, error) {
 			// need to read more
 			leftover := bufSize - processed
 			if leftover > 0 {
-				copy(c.buffer[:leftover], c.buffer[processed:])
+				copy(c.readBuffer[:leftover], c.readBuffer[processed:])
 			}
-			read, peekErr := in.Read(c.buffer[leftover:])
+			read, peekErr := in.Read(c.readBuffer[leftover:])
 			if peekErr != nil && peekErr != io.EOF {
 				err = peekErr
 				break
@@ -65,18 +66,24 @@ func (c *converter) Convert(in io.Reader, out io.Writer) (int, error) {
 		if maxRune > dataLen {
 			maxRune = dataLen
 		}
-		data := c.buffer[processed:maxRune]
+		data := c.readBuffer[processed:maxRune]
 
 		var discard, n2 int
 		r, width := utf8.DecodeRune(data)
 		if width == 1 && r == utf8.RuneError {
-			out.Write([]byte{'\\', 'x', lowerhex[data[0]>>4], lowerhex[data[0]&0xF]})
+			c.writeBuffer[0] = '\\'
+			c.writeBuffer[1] = 'x'
+			c.writeBuffer[2] = lowerhex[data[0]>>4]
+			c.writeBuffer[3] = lowerhex[data[0]&0xF]
+			out.Write(c.writeBuffer[0:4])
 			n2 = 4
 			discard = 1
 		} else {
 			discard = width
 			if r == rune('"') || r == '\\' { // always backslashed
-				out.Write([]byte{'\\', byte(r)})
+				c.writeBuffer[0] = '\\'
+				c.writeBuffer[1] = byte(r)
+				out.Write(c.writeBuffer[0:2])
 				n2 = 2
 			} else if strconv.IsPrint(r) {
 				out.Write(data[:width])
@@ -84,48 +91,74 @@ func (c *converter) Convert(in io.Reader, out io.Writer) (int, error) {
 			} else {
 				switch r {
 				case '\a':
-					out.Write([]byte{'\\', 'a'})
+					c.writeBuffer[0] = '\\'
+					c.writeBuffer[1] = 'a'
+					out.Write(c.writeBuffer[0:2])
 					n2 = 2
 				case '\b':
-					out.Write([]byte{'\\', 'b'})
+					c.writeBuffer[0] = '\\'
+					c.writeBuffer[1] = 'b'
+					out.Write(c.writeBuffer[0:2])
 					n2 = 2
 				case '\f':
-					out.Write([]byte{'\\', 'f'})
+					c.writeBuffer[0] = '\\'
+					c.writeBuffer[1] = 'f'
+					out.Write(c.writeBuffer[0:2])
 					n2 = 2
 				case '\n':
-					out.Write([]byte{'\\', 'n'})
+					c.writeBuffer[0] = '\\'
+					c.writeBuffer[1] = 'n'
+					out.Write(c.writeBuffer[0:2])
 					n2 = 2
 				case '\r':
-					out.Write([]byte{'\\', 'r'})
+					c.writeBuffer[0] = '\\'
+					c.writeBuffer[1] = 'r'
+					out.Write(c.writeBuffer[0:2])
 					n2 = 2
 				case '\t':
-					out.Write([]byte{'\\', 't'})
+					c.writeBuffer[0] = '\\'
+					c.writeBuffer[1] = 't'
+					out.Write(c.writeBuffer[0:2])
 					n2 = 2
 				case '\v':
-					out.Write([]byte{'\\', 'v'})
+					c.writeBuffer[0] = '\\'
+					c.writeBuffer[1] = 'v'
+					out.Write(c.writeBuffer[0:2])
 					n2 = 2
 				default:
 					switch {
 					case r < ' ':
-						out.Write([]byte{'\\', 'x', lowerhex[data[0]>>4], lowerhex[data[0]&0xF]})
+						c.writeBuffer[0] = '\\'
+						c.writeBuffer[1] = 'x'
+						c.writeBuffer[2] = lowerhex[data[0]>>4]
+						c.writeBuffer[3] = lowerhex[data[0]&0xF]
+						out.Write(c.writeBuffer[0:4])
 						n2 = 4
 					case r > utf8.MaxRune:
 						r = 0xFFFD
 						fallthrough
 					case r < 0x10000:
-						out.Write([]byte{'\\', 'u'})
+						c.writeBuffer[0] = '\\'
+						c.writeBuffer[1] = 'u'
 						n2 = 2
+						i := 2
 						for s := 12; s >= 0; s -= 4 {
-							out.Write([]byte{lowerhex[r>>uint(s)&0xF]})
+							c.writeBuffer[i] = lowerhex[r>>uint(s)&0xF]
+							i++
 							n2++
 						}
+						out.Write(c.writeBuffer[0:i])
 					default:
-						out.Write([]byte{'\\', 'U'})
+						c.writeBuffer[0] = '\\'
+						c.writeBuffer[1] = 'U'
 						n2 = 2
+						i := 2
 						for s := 28; s >= 0; s -= 4 {
-							out.Write([]byte{lowerhex[r>>uint(s)&0xF]})
+							c.writeBuffer[i] = lowerhex[r>>uint(s)&0xF]
+							i++
 							n2++
 						}
+						out.Write(c.writeBuffer[0:i])
 					}
 				}
 			}
