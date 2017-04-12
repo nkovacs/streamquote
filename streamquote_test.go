@@ -97,7 +97,7 @@ func TestLargeString(t *testing.T) {
 	buffer.WriteRune('"')
 	got := buffer.String()
 	if got != expected {
-		t.Fatalf("Large string does not match: %v %v", got, expected)
+		t.Fatalf("Large string does not match")
 	}
 }
 
