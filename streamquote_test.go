@@ -61,7 +61,9 @@ func (r *randomRuneProvider) Read(p []byte) (n int, err error) {
 		n = available
 		err = io.EOF
 	}
-	n, _ = r.r.Read(p[:n])
+	for i := 0; i < n; i++ {
+		p[i] = byte(r.r.Int63())
+	}
 	r.read += n
 	return
 }
