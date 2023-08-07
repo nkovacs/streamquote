@@ -25,6 +25,7 @@ var quotetests = []quoteTest{
 	{"\u263a", `"☺"`, `"\u263a"`, `"☺"`},
 	{"\U0010ffff", `"\U0010ffff"`, `"\U0010ffff"`, `"\U0010ffff"`},
 	{"\x04", `"\x04"`, `"\x04"`, `"\x04"`},
+	{"\x7f", `"\x7f"`, `"\x7f"`, `"\x7f"`},
 	// Some non-printable but graphic runes. Final column is double-quoted.
 	{"!\u00a0!\u2000!\u3000!", `"!\u00a0!\u2000!\u3000!"`, `"!\u00a0!\u2000!\u3000!"`, "\"!\u00a0!\u2000!\u3000!\""},
 }
@@ -36,7 +37,7 @@ func TestConverter(t *testing.T) {
 		var buffer bytes.Buffer
 		converter.Convert(strings.NewReader(tt.in), &buffer)
 		expected := tt.out[1 : len(tt.out)-1]
-		if out := buffer.String(); out != expected {
+		if out := buffer.String(); !testEqual(out, expected) {
 			t.Errorf("Quote(%s) = %s, want %s", tt.in, out, expected)
 		}
 	}
@@ -98,7 +99,7 @@ func TestLargeString(t *testing.T) {
 	}
 	buffer.WriteRune('"')
 	got := buffer.String()
-	if got != expected {
+	if !testEqual(got, expected) {
 		t.Fatalf("Large string does not match")
 	}
 }
@@ -146,4 +147,59 @@ func BenchmarkStrconvQuoteLarge(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		strconv.Quote(s)
 	}
+}
+
+var testEqual = func(a string, b string) bool {
+	return a == b
+}
+
+// testEqualOldGo compares strings byte-wise like ==, but considers `\x7f` and `\u007f` equal
+func testEqualOldGo(a string, b string) bool {
+	lenA := len(a)
+	lenB := len(b)
+	aI, bI := 0, 0
+	for aI < lenA && bI < lenB {
+		if aI+4 <= lenA && bI+6 <= lenB && a[aI:aI+4] == `\x7f` && b[bI:bI+6] == `\u007f` {
+			aI += 4
+			bI += 6
+		} else if aI+6 <= lenA && bI+4 <= lenB && a[aI:aI+6] == `\u007f` && b[bI:bI+4] == `\x7f` {
+			aI += 6
+			bI += 4
+		} else if a[aI] == b[bI] {
+			aI++
+			bI++
+		} else {
+			return false
+		}
+	}
+	return aI == lenA && bI == lenB
+}
+
+func init() {
+	if strconv.Quote("\x7f") == `"\u007f"` {
+		testEqual = testEqualOldGo
+	}
+}
+
+func TestTestEqualOldGo(t *testing.T) {
+	test := func(a string, b string, eq bool) {
+		actual := testEqualOldGo(a, b)
+		if eq != actual {
+			t.Fatalf("%v == %v, expected %v, got %v", a, b, eq, actual)
+		}
+		actual = testEqualOldGo(b, a)
+		if eq != actual {
+			t.Fatalf("%v == %v, expected %v, got %v", b, a, eq, actual)
+		}
+	}
+
+	test("\\x7f", "\\u007f", true)
+	test("\\x7f", "\\u007fa", false)
+	test("\\x7fa", "\\u007f", false)
+	test("a\\x7f", "\\u007f", false)
+	test("\\x7f", "a\\u007f", false)
+	test("\\x7fa", "\\u007fb", false)
+	test("a\\x7f", "b\\u007f", false)
+	test("\\x7f\\u007f", "\\u007f\\x7f", true)
+	test("\\x7", "\\u007f", false)
 }

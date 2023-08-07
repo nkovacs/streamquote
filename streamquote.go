@@ -127,7 +127,7 @@ func (c *converter) Convert(in io.Reader, out io.Writer) (int, error) {
 					n2 = 2
 				default:
 					switch {
-					case r < ' ':
+					case r < ' ' || r == 0x7f:
 						c.writeBuffer[0] = '\\'
 						c.writeBuffer[1] = 'x'
 						c.writeBuffer[2] = lowerhex[data[0]>>4]
